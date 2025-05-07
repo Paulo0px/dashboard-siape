@@ -113,8 +113,9 @@ if arquivos:
         margem_total = max(margem_total, margem)
         contratos_extraidos.extend(contratos)
         st.markdown(f"**Texto extraído de {arquivo.name}:**")
-        st.text_area("", texto, height=150)
-    st.write("📌 Contratos extraídos:", contratos_extraidos)
+        st.text_area(f"Texto OCR de {arquivo.name}:", texto, height=250)
+
+
 
 st.markdown("---")
 with st.form("form_cliente"):
