@@ -1,34 +1,22 @@
+# dashboard_credito_siape.py (com contagem de contratos corrigida)
+
 import streamlit as st
-import fitz  # PyMuPDF
+import pytesseract
+pytesseract.pytesseract_cmd = r"C:\\Program Files\\Tesseract-OCR\\tesseract.exe"
 from PIL import Image
+from pdf2image import convert_from_bytes
 import base64
 import re
-import pytesseract
-
-# ---------------------------
-# Extração de texto (PDF ou imagem)
-# ---------------------------
-def extrair_texto_ocr(arquivo):
-    texto = ""
-    if arquivo.type == "application/pdf":
-        pdf_bytes = arquivo.read()
-        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-        for page in doc:
-            pix = page.get_pixmap(dpi=300)
-            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            texto += pytesseract.image_to_string(img, lang='por') + "\n"
-    elif "image" in arquivo.type:
-        imagem = Image.open(arquivo)
-        texto += pytesseract.image_to_string(imagem, lang='por')
-    return texto
 
 # ---------------------------
 # Regras SIAPE Padrão
 # ---------------------------
-def analise_siape_padrao(idade, texto_ocr):
+def analise_siape_padrao(idade, contratos_ativos, texto_ocr):
     erros = []
     if idade < 18 or idade > 90:
         erros.append("Idade fora do intervalo permitido.")
+    if contratos_ativos >= 9:
+        erros.append("Cliente já possui 9 contratos ativos.")
     if re.search(r"CLT|comissionado", texto_ocr, re.IGNORECASE):
         erros.append("Vínculo CLT ou comissionado não aceito no SIAPE.")
     if re.search(r"UPAG.*PB|Paraíba", texto_ocr):
@@ -44,40 +32,83 @@ def analise_siape_padrao(idade, texto_ocr):
 # ---------------------------
 # Regras por Banco
 # ---------------------------
-def analisar_produtos_banco(banco, idade, margem):
+def analisar_produtos_banco(banco, idade, margem_liquida):
     produtos = {
-        "Facta": {"emprestimo_novo": 22 <= idade <= 76 and margem >= 1,
-                   "cartao_beneficio": 22 <= idade <= 76 and margem >= 1,
+        "Facta": {"emprestimo_novo": 22 <= idade <= 76 and margem_liquida >= 1,
+                   "cartao_beneficio": 22 <= idade <= 76 and margem_liquida >= 1,
                    "portabilidade": 22 <= idade <= 76,
                    "portabilidade_refin": 22 <= idade <= 76},
         "Banrisul": {"emprestimo_novo": idade <= 80,
-                     "cartao_beneficio": idade <= 80 and margem >= 1,
+                     "cartao_beneficio": idade <= 80 and margem_liquida >= 1,
                      "portabilidade": idade <= 80,
                      "portabilidade_refin": idade <= 80},
         "C6 Bank": {"emprestimo_novo": 21 <= idade <= 77,
-                    "cartao_beneficio": 21 <= idade <= 77 and margem >= 1,
+                    "cartao_beneficio": 21 <= idade <= 77 and margem_liquida >= 1,
                     "portabilidade": 21 <= idade <= 77,
                     "portabilidade_refin": 21 <= idade <= 77},
-        # Adicione os demais bancos se necessário
+        "Bradesco": {"emprestimo_novo": idade <= 78,
+                     "cartao_beneficio": idade <= 78,
+                     "portabilidade": idade <= 78,
+                     "portabilidade_refin": idade <= 75},
+        "Digio": {"emprestimo_novo": idade <= 79,
+                  "cartao_beneficio": idade <= 79,
+                  "portabilidade": idade <= 79,
+                  "portabilidade_refin": idade <= 79},
+        "Daycoval": {"emprestimo_novo": idade <= 77,
+                     "cartao_beneficio": idade <= 77,
+                     "portabilidade": idade <= 77,
+                     "portabilidade_refin": idade <= 77},
+        "Daycoval CLT": {"emprestimo_novo": idade <= 75,
+                         "cartao_beneficio": False,
+                         "portabilidade": idade <= 75,
+                         "portabilidade_refin": idade <= 73},
+        "Daycoval Melhor Idade": {"emprestimo_novo": 73 <= idade <= 84,
+                                   "cartao_beneficio": False,
+                                   "portabilidade": 73 <= idade <= 84,
+                                   "portabilidade_refin": 73 <= idade <= 84},
+        "Pan": {"emprestimo_novo": idade <= 77,
+                "cartao_beneficio": idade <= 77,
+                "portabilidade": idade <= 77,
+                "portabilidade_refin": idade <= 77},
+        "Safra": {"emprestimo_novo": idade <= 77,
+                  "cartao_beneficio": idade <= 77,
+                  "portabilidade": idade <= 77,
+                  "portabilidade_refin": idade <= 77},
+        "Olé": {"emprestimo_novo": idade <= 78,
+                "cartao_beneficio": idade <= 78,
+                "portabilidade": idade <= 78,
+                "portabilidade_refin": idade <= 75},
     }
     return produtos.get(banco, {})
 
 # ---------------------------
-# Extração de margem e contratos
+# OCR + Extração de Dados
 # ---------------------------
+def extrair_texto_ocr(arquivo):
+    if arquivo.type == "application/pdf":
+        imagens = convert_from_bytes(arquivo.read())
+        texto = ""
+        for img in imagens:
+            texto += pytesseract.image_to_string(img, lang='por')
+        return texto
+    elif "image" in arquivo.type:
+        imagem = Image.open(arquivo)
+        return pytesseract.image_to_string(imagem, lang='por')
+    return ""
+
 def extrair_margem_e_contratos(texto):
     margem = 0.0
-    margem_match = re.search(r"(margem\s*(?:dispon[ií]vel|líquida)?:?)\s*R?\$?\s*(\d+[.,]\d{2})", texto, re.IGNORECASE)
+    margem_match = re.search(r"(margem\s*(?:dispon[ií]vel|líquida)?:?)\s*R\$\s*(\d+[.,]\d{2})", texto, re.IGNORECASE)
     if margem_match:
         margem = float(margem_match.group(2).replace(",", "."))
 
     linhas = texto.splitlines()
     contratos = []
     for linha in linhas:
-        match = re.search(r"(\d{6,}).*?R\$?\s*(\d+[.,]\d{2})", linha)
+        match = re.search(r"(\d{6,})[^\n]?(R\$\s\d+[.,]\d{2})", linha)
         if match:
             numero = match.group(1)
-            valor = float(match.group(2).replace(",", "."))
+            valor = float(match.group(2).replace("R$", "").replace(",", "."))
             contratos.append((numero, valor))
 
     return margem, contratos
@@ -113,8 +144,8 @@ if arquivos:
         margem, contratos = extrair_margem_e_contratos(texto)
         margem_total = max(margem_total, margem)
         contratos_extraidos.extend(contratos)
-        st.markdown(f"**Texto extraído de {arquivo.name}:**")
-        st.text_area(f"Texto OCR de {arquivo.name}:", texto, height=250)
+        st.markdown(f"*Texto extraído de {arquivo.name}:*")
+        st.text_area("", texto, height=150)
 
 st.markdown("---")
 with st.form("form_cliente"):
@@ -123,8 +154,10 @@ with st.form("form_cliente"):
     enviar = st.form_submit_button("Analisar")
 
 if enviar:
-    siape_valido, msg = analise_siape_padrao(idade, texto_geral)
+    qtd_contratos = len(contratos_extraidos)
+    siape_valido, msg = analise_siape_padrao(idade, qtd_contratos, texto_geral)
     st.subheader(f"Resultado da Análise para {nome.upper()}:")
+
     if not siape_valido:
         st.error(f"Reprovado: {msg}")
     else:
@@ -140,10 +173,13 @@ if enviar:
             for coluna in colunas:
                 label = coluna.replace("_", " ").capitalize()
                 aprovado = resultado.get(coluna)
-                if aprovado and "portabilidade" in coluna and contratos_extraidos:
-                    numero, valor = contratos_extraidos[0]
-                    st.write(f"*{label}:* ✅ Sim (Contrato: {numero}, Parcela: R$ {valor:.2f})")
+                if aprovado and "portabilidade" in coluna:
+                    if contratos_extraidos:
+                        numero, valor = contratos_extraidos[0]
+                        st.write(f"{label}: ✅ Sim (Contrato: {numero}, Parcela: R$ {valor:.2f})")
+                    else:
+                        st.write(f"{label}: ✅ Sim")
                 else:
-                    st.write(f"*{label}:* {'✅ Sim' if aprovado else '❌ Não'}")
+                    st.write(f"{label}: {'✅ Sim' if aprovado else '❌ Não'}")
 
 st.markdown("<br><hr><p style='text-align: center; color: gray;'>Agilidade e segurança</p>", unsafe_allow_html=True)
