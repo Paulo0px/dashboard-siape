@@ -1,10 +1,24 @@
-# dashboard_credito_siape.py (com PyMuPDF para leitura de PDFs)
-
 import streamlit as st
 import fitz  # PyMuPDF
 from PIL import Image
 import base64
 import re
+import pytesseract
+
+# ---------------------------
+# Extração de texto (PDF ou imagem)
+# ---------------------------
+def extrair_texto(arquivo):
+    texto = ""
+    if arquivo.type == "application/pdf":
+        pdf_bytes = arquivo.read()
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        for page in doc:
+            texto += page.get_text()
+    elif "image" in arquivo.type:
+        imagem = Image.open(arquivo)
+        texto += pytesseract.image_to_string(imagem, lang='por')
+    return texto
 
 # ---------------------------
 # Regras SIAPE Padrão
@@ -42,25 +56,13 @@ def analisar_produtos_banco(banco, idade, margem):
                     "cartao_beneficio": 21 <= idade <= 77 and margem >= 1,
                     "portabilidade": 21 <= idade <= 77,
                     "portabilidade_refin": 21 <= idade <= 77},
-        # ... demais bancos como já estão no seu código
+        # Inclua os demais bancos conforme necessidade
     }
     return produtos.get(banco, {})
 
 # ---------------------------
-# Extração
+# Extração de valores
 # ---------------------------
-def extrair_texto(arquivo):
-    if arquivo.type == "application/pdf":
-        doc = fitz.open(stream=arquivo.read(), filetype="pdf")
-        texto = ""
-        for pagina in doc:
-            texto += pagina.get_text()
-        return texto
-    elif "image" in arquivo.type:
-        imagem = Image.open(arquivo)
-        return ""  # Por simplicidade, evitamos OCR aqui
-    return ""
-
 def extrair_margem_e_contratos(texto):
     margem = 0.0
     margem_match = re.search(r"(margem\s*(?:dispon[ií]vel|líquida)?:?)\s*R\$\s*(\d+[.,]\d{2})", texto, re.IGNORECASE)
