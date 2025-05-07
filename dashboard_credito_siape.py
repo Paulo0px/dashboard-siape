@@ -1,20 +1,19 @@
 import streamlit as st
-import fitz  # PyMuPDF
+import pytesseract
 from PIL import Image
+from pdf2image import convert_from_bytes
 import base64
 import re
-import pytesseract
 
 # ---------------------------
 # Extração de texto (PDF ou imagem)
 # ---------------------------
-def extrair_texto(arquivo):
+def extrair_texto_ocr(arquivo):
     texto = ""
     if arquivo.type == "application/pdf":
-        pdf_bytes = arquivo.read()
-        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-        for page in doc:
-            texto += page.get_text()
+        imagens = convert_from_bytes(arquivo.read())
+        for img in imagens:
+            texto += pytesseract.image_to_string(img, lang='por')
     elif "image" in arquivo.type:
         imagem = Image.open(arquivo)
         texto += pytesseract.image_to_string(imagem, lang='por')
@@ -72,7 +71,6 @@ def extrair_margem_e_contratos(texto):
     linhas = texto.splitlines()
     contratos = []
     for linha in linhas:
-        # Regex mais flexível
         match = re.search(r"(\d{6,})[^\d\n]{0,10}R?\$?\s*(\d+[.,]\d{2})", linha)
         if match:
             numero = match.group(1)
@@ -107,15 +105,13 @@ contratos_extraidos = []
 
 if arquivos:
     for arquivo in arquivos:
-        texto = extrair_texto(arquivo)
+        texto = extrair_texto_ocr(arquivo)
         texto_geral += texto + "\n"
         margem, contratos = extrair_margem_e_contratos(texto)
         margem_total = max(margem_total, margem)
         contratos_extraidos.extend(contratos)
         st.markdown(f"**Texto extraído de {arquivo.name}:**")
         st.text_area(f"Texto OCR de {arquivo.name}:", texto, height=250)
-
-
 
 st.markdown("---")
 with st.form("form_cliente"):
