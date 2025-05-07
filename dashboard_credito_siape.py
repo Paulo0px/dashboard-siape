@@ -1,9 +1,9 @@
 import streamlit as st
-import pytesseract
+import fitz  # PyMuPDF
 from PIL import Image
-from pdf2image import convert_from_bytes
 import base64
 import re
+import pytesseract
 
 # ---------------------------
 # Extração de texto (PDF ou imagem)
@@ -11,9 +11,12 @@ import re
 def extrair_texto_ocr(arquivo):
     texto = ""
     if arquivo.type == "application/pdf":
-        imagens = convert_from_bytes(arquivo.read())
-        for img in imagens:
-            texto += pytesseract.image_to_string(img, lang='por')
+        pdf_bytes = arquivo.read()
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        for page in doc:
+            pix = page.get_pixmap(dpi=300)
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            texto += pytesseract.image_to_string(img, lang='por') + "\n"
     elif "image" in arquivo.type:
         imagem = Image.open(arquivo)
         texto += pytesseract.image_to_string(imagem, lang='por')
@@ -55,7 +58,38 @@ def analisar_produtos_banco(banco, idade, margem):
                     "cartao_beneficio": 21 <= idade <= 77 and margem >= 1,
                     "portabilidade": 21 <= idade <= 77,
                     "portabilidade_refin": 21 <= idade <= 77},
-        # Adicione os demais bancos conforme necessidade
+        "Bradesco": {"emprestimo_novo": idade <= 78,
+                     "cartao_beneficio": idade <= 78,
+                     "portabilidade": idade <= 78,
+                     "portabilidade_refin": idade <= 75},
+        "Digio": {"emprestimo_novo": idade <= 79,
+                  "cartao_beneficio": idade <= 79,
+                  "portabilidade": idade <= 79,
+                  "portabilidade_refin": idade <= 75},
+        "Daycoval": {"emprestimo_novo": idade <= 77,
+                     "cartao_beneficio": idade <= 77,
+                     "portabilidade": idade <= 77,
+                     "portabilidade_refin": idade <= 77},
+        "Daycoval CLT": {"emprestimo_novo": idade <= 75,
+                         "cartao_beneficio": False,
+                         "portabilidade": idade <= 75,
+                         "portabilidade_refin": idade <= 73},
+        "Daycoval Melhor Idade": {"emprestimo_novo": 73 <= idade <= 84,
+                                   "cartao_beneficio": False,
+                                   "portabilidade": 73 <= idade <= 84,
+                                   "portabilidade_refin": 73 <= idade <= 84},
+        "Pan": {"emprestimo_novo": idade <= 77,
+                "cartao_beneficio": idade <= 77,
+                "portabilidade": idade <= 77,
+                "portabilidade_refin": idade <= 77},
+        "Safra": {"emprestimo_novo": idade <= 77,
+                  "cartao_beneficio": idade <= 77,
+                  "portabilidade": idade <= 77,
+                  "portabilidade_refin": idade <= 77},
+        "Olé": {"emprestimo_novo": idade <= 78,
+                "cartao_beneficio": idade <= 78,
+                "portabilidade": idade <= 78,
+                "portabilidade_refin": idade <= 75},
     }
     return produtos.get(banco, {})
 
@@ -131,7 +165,7 @@ if enviar:
 
         for banco in bancos:
             resultado = analisar_produtos_banco(banco, idade, margem_total)
-            st.markdown(f"### \U0001F3E6 {banco}")
+            st.markdown(f"### 🏦 {banco}")
             for coluna in colunas:
                 label = coluna.replace("_", " ").capitalize()
                 aprovado = resultado.get(coluna)
