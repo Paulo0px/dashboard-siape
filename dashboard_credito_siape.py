@@ -96,19 +96,27 @@ def analisar_produtos_banco(banco, idade, margem):
 # ---------------------------
 def extrair_margem_e_contratos(texto):
     margem = 0.0
-    margem_match = re.search(r"(margem\s*(?:dispon[ií]vel|líquida)?:?)\s*R\$\s*(\d+[.,]?\d{0,2})", texto, re.IGNORECASE)
+    contratos = []
+
+    # Captura margem líquida ou disponível
+    margem_match = re.search(r"(margem.*?:?)\s*R?\$?\s*(\d+[.,]\d{2})", texto, re.IGNORECASE)
     if margem_match:
         margem = float(margem_match.group(2).replace(",", "."))
-    
-    contratos = []
+
+    # Novos padrões para pegar parcelas com valor
     linhas = texto.splitlines()
     for linha in linhas:
-        match = re.search(r"(\d{6,})[^\n]*?(R\$\s*\d+[.,]\d{2})", linha)
+        # Debug opcional:
+        # st.write(f"Linha: {linha}")
+
+        match = re.search(r"(?:Contrato\s*[:\-]?\s*)?(\d{5,})[^\n]{0,30}?(?:Parcela|Valor)[^\d]*(\d+[.,]\d{2})", linha, re.IGNORECASE)
         if match:
             numero = match.group(1)
-            valor = float(match.group(2).replace("R$", "").replace(",", "."))
+            valor = float(match.group(2).replace(",", "."))
             contratos.append((numero, valor))
+
     return margem, contratos
+
 
 # ---------------------------
 # Interface
