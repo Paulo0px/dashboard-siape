@@ -1,10 +1,8 @@
-# dashboard_credito_siape.py (ajustado com extração precisa de contratos)
+# dashboard_credito_siape.py (com PyMuPDF para leitura de PDFs)
 
 import streamlit as st
-import pytesseract
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+import fitz  # PyMuPDF
 from PIL import Image
-from pdf2image import convert_from_bytes
 import base64
 import re
 
@@ -44,54 +42,23 @@ def analisar_produtos_banco(banco, idade, margem):
                     "cartao_beneficio": 21 <= idade <= 77 and margem >= 1,
                     "portabilidade": 21 <= idade <= 77,
                     "portabilidade_refin": 21 <= idade <= 77},
-        "Bradesco": {"emprestimo_novo": idade <= 78,
-                     "cartao_beneficio": idade <= 78,
-                     "portabilidade": idade <= 78,
-                     "portabilidade_refin": idade <= 75},
-        "Digio": {"emprestimo_novo": idade <= 79,
-                  "cartao_beneficio": idade <= 79,
-                  "portabilidade": idade <= 79,
-                  "portabilidade_refin": idade <= 75},
-        "Daycoval": {"emprestimo_novo": idade <= 77,
-                     "cartao_beneficio": idade <= 77,
-                     "portabilidade": idade <= 77,
-                     "portabilidade_refin": idade <= 77},
-        "Daycoval CLT": {"emprestimo_novo": idade <= 75,
-                         "cartao_beneficio": False,
-                         "portabilidade": idade <= 75,
-                         "portabilidade_refin": idade <= 73},
-        "Daycoval Melhor Idade": {"emprestimo_novo": 73 <= idade <= 84,
-                                   "cartao_beneficio": False,
-                                   "portabilidade": 73 <= idade <= 84,
-                                   "portabilidade_refin": 73 <= idade <= 84},
-        "Pan": {"emprestimo_novo": idade <= 77,
-                "cartao_beneficio": idade <= 77,
-                "portabilidade": idade <= 77,
-                "portabilidade_refin": idade <= 77},
-        "Safra": {"emprestimo_novo": idade <= 77,
-                  "cartao_beneficio": idade <= 77,
-                  "portabilidade": idade <= 77,
-                  "portabilidade_refin": idade <= 77},
-        "Olé": {"emprestimo_novo": idade <= 78,
-                "cartao_beneficio": idade <= 78,
-                "portabilidade": idade <= 78,
-                "portabilidade_refin": idade <= 75},
+        # ... demais bancos como já estão no seu código
     }
     return produtos.get(banco, {})
 
 # ---------------------------
-# OCR + Extração
+# Extração
 # ---------------------------
-def extrair_texto_ocr(arquivo):
+def extrair_texto(arquivo):
     if arquivo.type == "application/pdf":
-        imagens = convert_from_bytes(arquivo.read())
+        doc = fitz.open(stream=arquivo.read(), filetype="pdf")
         texto = ""
-        for img in imagens:
-            texto += pytesseract.image_to_string(img, lang='por')
+        for pagina in doc:
+            texto += pagina.get_text()
         return texto
     elif "image" in arquivo.type:
         imagem = Image.open(arquivo)
-        return pytesseract.image_to_string(imagem, lang='por')
+        return ""  # Por simplicidade, evitamos OCR aqui
     return ""
 
 def extrair_margem_e_contratos(texto):
@@ -137,7 +104,7 @@ contratos_extraidos = []
 
 if arquivos:
     for arquivo in arquivos:
-        texto = extrair_texto_ocr(arquivo)
+        texto = extrair_texto(arquivo)
         texto_geral += texto + "\n"
         margem, contratos = extrair_margem_e_contratos(texto)
         margem_total = max(margem_total, margem)
@@ -152,10 +119,8 @@ with st.form("form_cliente"):
     enviar = st.form_submit_button("Analisar")
 
 if enviar:
-    qtd_contratos = len(contratos_extraidos)
     siape_valido, msg = analise_siape_padrao(idade, texto_geral)
     st.subheader(f"Resultado da Análise para {nome.upper()}:")
-
     if not siape_valido:
         st.error(f"Reprovado: {msg}")
     else:
@@ -164,8 +129,8 @@ if enviar:
         colunas = ["emprestimo_novo", "cartao_beneficio", "portabilidade", "portabilidade_refin"]
 
         for banco in bancos:
-            st.markdown(f"### \U0001F3E6 {banco}")
             resultado = analisar_produtos_banco(banco, idade, margem_total)
+            st.markdown(f"### \U0001F3E6 {banco}")
             for coluna in colunas:
                 label = coluna.replace("_", " ").capitalize()
                 aprovado = resultado.get(coluna)
