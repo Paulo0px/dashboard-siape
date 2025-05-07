@@ -98,22 +98,18 @@ def extrair_margem_e_contratos(texto):
     margem = 0.0
     contratos = []
 
-    # Captura margem líquida ou disponível
-    margem_match = re.search(r"(margem.*?:?)\s*R?\$?\s*(\d+[.,]\d{2})", texto, re.IGNORECASE)
+    # Buscar margem
+    margem_match = re.search(r"margem\s*(?:dispon[ií]vel|líquida)?\s*[:\-]?\s*R?\$?\s*(\d+[.,]\d{2})", texto, re.IGNORECASE)
     if margem_match:
-        margem = float(margem_match.group(2).replace(",", "."))
+        margem = float(margem_match.group(1).replace(",", "."))
 
-    # Novos padrões para pegar parcelas com valor
-    linhas = texto.splitlines()
-    for linha in linhas:
-        # Debug opcional:
-        # st.write(f"Linha: {linha}")
-
-        match = re.search(r"(?:Contrato\s*[:\-]?\s*)?(\d{5,})[^\n]{0,30}?(?:Parcela|Valor)[^\d]*(\d+[.,]\d{2})", linha, re.IGNORECASE)
-        if match:
-            numero = match.group(1)
-            valor = float(match.group(2).replace(",", "."))
-            contratos.append((numero, valor))
+    # Buscar contratos: tenta capturar parcelas com ou sem número de contrato
+    matches = re.findall(r"(?:contrato\s*\d{6,}|nº\s*\d{6,})?.*?parcela\s*[:\-]?\s*R?\$?\s*(\d+[.,]\d{2})", texto, re.IGNORECASE)
+    for i, valor in enumerate(matches):
+        try:
+            contratos.append((f"Contrato {i+1}", float(valor.replace(",", "."))))
+        except:
+            continue
 
     return margem, contratos
 
