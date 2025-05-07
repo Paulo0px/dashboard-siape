@@ -8,19 +8,17 @@ import pytesseract
 # ---------------------------
 # Extração de texto (PDF ou imagem)
 # ---------------------------
-from pdf2image import convert_from_bytes
-
 def extrair_texto(arquivo):
     texto = ""
     if arquivo.type == "application/pdf":
-        imagens = convert_from_bytes(arquivo.read())
-        for img in imagens:
-            texto += pytesseract.image_to_string(img, lang='por')
+        pdf_bytes = arquivo.read()
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        for page in doc:
+            texto += page.get_text()
     elif "image" in arquivo.type:
         imagem = Image.open(arquivo)
         texto += pytesseract.image_to_string(imagem, lang='por')
     return texto
-
 
 # ---------------------------
 # Regras SIAPE Padrão
@@ -47,9 +45,9 @@ def analise_siape_padrao(idade, texto_ocr):
 def analisar_produtos_banco(banco, idade, margem):
     produtos = {
         "Facta": {"emprestimo_novo": 22 <= idade <= 76 and margem >= 1,
-                  "cartao_beneficio": 22 <= idade <= 76 and margem >= 1,
-                  "portabilidade": 22 <= idade <= 76,
-                  "portabilidade_refin": 22 <= idade <= 76},
+                   "cartao_beneficio": 22 <= idade <= 76 and margem >= 1,
+                   "portabilidade": 22 <= idade <= 76,
+                   "portabilidade_refin": 22 <= idade <= 76},
         "Banrisul": {"emprestimo_novo": idade <= 80,
                      "cartao_beneficio": idade <= 80 and margem >= 1,
                      "portabilidade": idade <= 80,
@@ -58,63 +56,30 @@ def analisar_produtos_banco(banco, idade, margem):
                     "cartao_beneficio": 21 <= idade <= 77 and margem >= 1,
                     "portabilidade": 21 <= idade <= 77,
                     "portabilidade_refin": 21 <= idade <= 77},
-        "Bradesco": {"emprestimo_novo": idade <= 78,
-                     "cartao_beneficio": idade <= 78,
-                     "portabilidade": idade <= 78,
-                     "portabilidade_refin": idade <= 75},
-        "Digio": {"emprestimo_novo": idade <= 79,
-                  "cartao_beneficio": idade <= 79,
-                  "portabilidade": idade <= 79,
-                  "portabilidade_refin": idade <= 75},
-        "Daycoval": {"emprestimo_novo": idade <= 77,
-                     "cartao_beneficio": idade <= 77,
-                     "portabilidade": idade <= 77,
-                     "portabilidade_refin": idade <= 77},
-        "Daycoval CLT": {"emprestimo_novo": idade <= 75,
-                         "cartao_beneficio": False,
-                         "portabilidade": idade <= 75,
-                         "portabilidade_refin": idade <= 73},
-        "Daycoval Melhor Idade": {"emprestimo_novo": 73 <= idade <= 84,
-                                  "cartao_beneficio": False,
-                                  "portabilidade": 73 <= idade <= 84,
-                                  "portabilidade_refin": 73 <= idade <= 84},
-        "Pan": {"emprestimo_novo": idade <= 77,
-                "cartao_beneficio": idade <= 77,
-                "portabilidade": idade <= 77,
-                "portabilidade_refin": idade <= 77},
-        "Safra": {"emprestimo_novo": idade <= 77,
-                  "cartao_beneficio": idade <= 77,
-                  "portabilidade": idade <= 77,
-                  "portabilidade_refin": idade <= 77},
-        "Olé": {"emprestimo_novo": idade <= 78,
-                "cartao_beneficio": idade <= 78,
-                "portabilidade": idade <= 78,
-                "portabilidade_refin": idade <= 75},
+        # Adicione os demais bancos conforme necessidade
     }
     return produtos.get(banco, {})
 
 # ---------------------------
-# Extração de margem e contratos (ajustada)
+# Extração de margem e contratos
 # ---------------------------
 def extrair_margem_e_contratos(texto):
     margem = 0.0
-    contratos = []
-
-    # Buscar margem
-    margem_match = re.search(r"margem\s*(?:dispon[ií]vel|líquida)?\s*[:\-]?\s*R?\$?\s*(\d+[.,]\d{2})", texto, re.IGNORECASE)
+    margem_match = re.search(r"(margem\s*(?:dispon[ií]vel|líquida)?:?)\s*R?\$?\s*(\d+[.,]\d{2})", texto, re.IGNORECASE)
     if margem_match:
-        margem = float(margem_match.group(1).replace(",", "."))
+        margem = float(margem_match.group(2).replace(",", "."))
 
-    # Buscar contratos: tenta capturar parcelas com ou sem número de contrato
-    matches = re.findall(r"(?:contrato\s*\d{6,}|nº\s*\d{6,})?.*?parcela\s*[:\-]?\s*R?\$?\s*(\d+[.,]\d{2})", texto, re.IGNORECASE)
-    for i, valor in enumerate(matches):
-        try:
-            contratos.append((f"Contrato {i+1}", float(valor.replace(",", "."))))
-        except:
-            continue
+    linhas = texto.splitlines()
+    contratos = []
+    for linha in linhas:
+        # Regex mais flexível
+        match = re.search(r"(\d{6,})[^\d\n]{0,10}R?\$?\s*(\d+[.,]\d{2})", linha)
+        if match:
+            numero = match.group(1)
+            valor = float(match.group(2).replace("R$", "").replace(",", "."))
+            contratos.append((numero, valor))
 
     return margem, contratos
-
 
 # ---------------------------
 # Interface
@@ -149,6 +114,7 @@ if arquivos:
         contratos_extraidos.extend(contratos)
         st.markdown(f"**Texto extraído de {arquivo.name}:**")
         st.text_area("", texto, height=150)
+    st.write("📌 Contratos extraídos:", contratos_extraidos)
 
 st.markdown("---")
 with st.form("form_cliente"):
