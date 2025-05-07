@@ -58,38 +58,7 @@ def analisar_produtos_banco(banco, idade, margem):
                     "cartao_beneficio": 21 <= idade <= 77 and margem >= 1,
                     "portabilidade": 21 <= idade <= 77,
                     "portabilidade_refin": 21 <= idade <= 77},
-        "Bradesco": {"emprestimo_novo": idade <= 78,
-                     "cartao_beneficio": idade <= 78,
-                     "portabilidade": idade <= 78,
-                     "portabilidade_refin": idade <= 75},
-        "Digio": {"emprestimo_novo": idade <= 79,
-                  "cartao_beneficio": idade <= 79,
-                  "portabilidade": idade <= 79,
-                  "portabilidade_refin": idade <= 75},
-        "Daycoval": {"emprestimo_novo": idade <= 77,
-                     "cartao_beneficio": idade <= 77,
-                     "portabilidade": idade <= 77,
-                     "portabilidade_refin": idade <= 77},
-        "Daycoval CLT": {"emprestimo_novo": idade <= 75,
-                         "cartao_beneficio": False,
-                         "portabilidade": idade <= 75,
-                         "portabilidade_refin": idade <= 73},
-        "Daycoval Melhor Idade": {"emprestimo_novo": 73 <= idade <= 84,
-                                   "cartao_beneficio": False,
-                                   "portabilidade": 73 <= idade <= 84,
-                                   "portabilidade_refin": 73 <= idade <= 84},
-        "Pan": {"emprestimo_novo": idade <= 77,
-                "cartao_beneficio": idade <= 77,
-                "portabilidade": idade <= 77,
-                "portabilidade_refin": idade <= 77},
-        "Safra": {"emprestimo_novo": idade <= 77,
-                  "cartao_beneficio": idade <= 77,
-                  "portabilidade": idade <= 77,
-                  "portabilidade_refin": idade <= 77},
-        "Olé": {"emprestimo_novo": idade <= 78,
-                "cartao_beneficio": idade <= 78,
-                "portabilidade": idade <= 78,
-                "portabilidade_refin": idade <= 75},
+        # Adicione os demais bancos se necessário
     }
     return produtos.get(banco, {})
 
@@ -105,10 +74,10 @@ def extrair_margem_e_contratos(texto):
     linhas = texto.splitlines()
     contratos = []
     for linha in linhas:
-        match = re.search(r"(\d{6,})[^\d\n]{0,10}R?\$?\s*(\d+[.,]\d{2})", linha)
+        match = re.search(r"(\d{6,}).*?R\$?\s*(\d+[.,]\d{2})", linha)
         if match:
             numero = match.group(1)
-            valor = float(match.group(2).replace("R$", "").replace(",", "."))
+            valor = float(match.group(2).replace(",", "."))
             contratos.append((numero, valor))
 
     return margem, contratos
@@ -165,6 +134,8 @@ if enviar:
 
         for banco in bancos:
             resultado = analisar_produtos_banco(banco, idade, margem_total)
+            if not resultado:
+                continue
             st.markdown(f"### 🏦 {banco}")
             for coluna in colunas:
                 label = coluna.replace("_", " ").capitalize()
