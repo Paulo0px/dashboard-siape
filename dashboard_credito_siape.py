@@ -45,9 +45,9 @@ def analise_siape_padrao(idade, texto_ocr):
 def analisar_produtos_banco(banco, idade, margem):
     produtos = {
         "Facta": {"emprestimo_novo": 22 <= idade <= 76 and margem >= 1,
-                   "cartao_beneficio": 22 <= idade <= 76 and margem >= 1,
-                   "portabilidade": 22 <= idade <= 76,
-                   "portabilidade_refin": 22 <= idade <= 76},
+                  "cartao_beneficio": 22 <= idade <= 76 and margem >= 1,
+                  "portabilidade": 22 <= idade <= 76,
+                  "portabilidade_refin": 22 <= idade <= 76},
         "Banrisul": {"emprestimo_novo": idade <= 80,
                      "cartao_beneficio": idade <= 80 and margem >= 1,
                      "portabilidade": idade <= 80,
@@ -56,28 +56,58 @@ def analisar_produtos_banco(banco, idade, margem):
                     "cartao_beneficio": 21 <= idade <= 77 and margem >= 1,
                     "portabilidade": 21 <= idade <= 77,
                     "portabilidade_refin": 21 <= idade <= 77},
-        # Inclua os demais bancos conforme necessidade
+        "Bradesco": {"emprestimo_novo": idade <= 78,
+                     "cartao_beneficio": idade <= 78,
+                     "portabilidade": idade <= 78,
+                     "portabilidade_refin": idade <= 75},
+        "Digio": {"emprestimo_novo": idade <= 79,
+                  "cartao_beneficio": idade <= 79,
+                  "portabilidade": idade <= 79,
+                  "portabilidade_refin": idade <= 75},
+        "Daycoval": {"emprestimo_novo": idade <= 77,
+                     "cartao_beneficio": idade <= 77,
+                     "portabilidade": idade <= 77,
+                     "portabilidade_refin": idade <= 77},
+        "Daycoval CLT": {"emprestimo_novo": idade <= 75,
+                         "cartao_beneficio": False,
+                         "portabilidade": idade <= 75,
+                         "portabilidade_refin": idade <= 73},
+        "Daycoval Melhor Idade": {"emprestimo_novo": 73 <= idade <= 84,
+                                  "cartao_beneficio": False,
+                                  "portabilidade": 73 <= idade <= 84,
+                                  "portabilidade_refin": 73 <= idade <= 84},
+        "Pan": {"emprestimo_novo": idade <= 77,
+                "cartao_beneficio": idade <= 77,
+                "portabilidade": idade <= 77,
+                "portabilidade_refin": idade <= 77},
+        "Safra": {"emprestimo_novo": idade <= 77,
+                  "cartao_beneficio": idade <= 77,
+                  "portabilidade": idade <= 77,
+                  "portabilidade_refin": idade <= 77},
+        "Olé": {"emprestimo_novo": idade <= 78,
+                "cartao_beneficio": idade <= 78,
+                "portabilidade": idade <= 78,
+                "portabilidade_refin": idade <= 75},
     }
     return produtos.get(banco, {})
 
 # ---------------------------
-# Extração de valores
+# Extração de margem e contratos (ajustada)
 # ---------------------------
 def extrair_margem_e_contratos(texto):
     margem = 0.0
-    margem_match = re.search(r"(margem\s*(?:dispon[ií]vel|líquida)?:?)\s*R\$\s*(\d+[.,]\d{2})", texto, re.IGNORECASE)
+    margem_match = re.search(r"(margem\s*(?:dispon[ií]vel|líquida)?:?)\s*R\$\s*(\d+[.,]?\d{0,2})", texto, re.IGNORECASE)
     if margem_match:
         margem = float(margem_match.group(2).replace(",", "."))
-
-    linhas = texto.splitlines()
+    
     contratos = []
+    linhas = texto.splitlines()
     for linha in linhas:
         match = re.search(r"(\d{6,})[^\n]*?(R\$\s*\d+[.,]\d{2})", linha)
         if match:
             numero = match.group(1)
             valor = float(match.group(2).replace("R$", "").replace(",", "."))
             contratos.append((numero, valor))
-
     return margem, contratos
 
 # ---------------------------
