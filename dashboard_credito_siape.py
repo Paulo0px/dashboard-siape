@@ -8,17 +8,19 @@ import pytesseract
 # ---------------------------
 # Extração de texto (PDF ou imagem)
 # ---------------------------
+from pdf2image import convert_from_bytes
+
 def extrair_texto(arquivo):
     texto = ""
     if arquivo.type == "application/pdf":
-        pdf_bytes = arquivo.read()
-        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-        for page in doc:
-            texto += page.get_text()
+        imagens = convert_from_bytes(arquivo.read())
+        for img in imagens:
+            texto += pytesseract.image_to_string(img, lang='por')
     elif "image" in arquivo.type:
         imagem = Image.open(arquivo)
         texto += pytesseract.image_to_string(imagem, lang='por')
     return texto
+
 
 # ---------------------------
 # Regras SIAPE Padrão
